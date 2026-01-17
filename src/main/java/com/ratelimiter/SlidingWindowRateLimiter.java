@@ -28,13 +28,13 @@ public class SlidingWindowRateLimiter implements AutoCloseable {
     
     private static final Logger logger = LoggerFactory.getLogger(SlidingWindowRateLimiter.class);
     private static final String RATE_LIMIT_KEY_PREFIX = "rate_limit:";
-    private static final AtomicLong REQUEST_COUNTER = new AtomicLong(0);
     
     private final RedisClient redisClient;
     private final StatefulRedisConnection<String, String> connection;
     private final String luaScriptSha;
     private final long windowSizeMs;
     private final int maxRequests;
+    private final AtomicLong requestCounter = new AtomicLong(0);
     
     /**
      * Creates a new SlidingWindowRateLimiter instance.
@@ -235,13 +235,13 @@ public class SlidingWindowRateLimiter implements AutoCloseable {
     
     /**
      * Generates a unique request ID for ZADD operations.
-     * Uses an atomic counter combined with timestamp for efficiency and uniqueness.
+     * Uses an instance-level atomic counter combined with timestamp for efficiency and uniqueness.
      * 
      * @param timestamp The current timestamp in milliseconds
      * @return A unique request ID
      */
     private String generateRequestId(long timestamp) {
-        return timestamp + "-" + REQUEST_COUNTER.incrementAndGet();
+        return timestamp + "-" + requestCounter.incrementAndGet();
     }
     
     /**

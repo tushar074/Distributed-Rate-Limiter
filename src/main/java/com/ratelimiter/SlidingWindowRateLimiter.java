@@ -14,8 +14,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -28,6 +28,7 @@ public class SlidingWindowRateLimiter implements AutoCloseable {
     
     private static final Logger logger = LoggerFactory.getLogger(SlidingWindowRateLimiter.class);
     private static final String RATE_LIMIT_KEY_PREFIX = "rate_limit:";
+    private static final AtomicLong REQUEST_COUNTER = new AtomicLong(0);
     
     private final RedisClient redisClient;
     private final StatefulRedisConnection<String, String> connection;
@@ -108,11 +109,14 @@ public class SlidingWindowRateLimiter implements AutoCloseable {
      * 
      * @param clientId The unique identifier for the client (e.g., user ID, IP address)
      * @return true if the request is allowed, false if rate limited
+     * @throws IllegalArgumentException if clientId is null or contains invalid characters
      */
     public boolean isAllowed(String clientId) {
+        validateClientId(clientId);
+        
         String rateLimitKey = RATE_LIMIT_KEY_PREFIX + clientId;
         long currentTimestamp = System.currentTimeMillis();
-        String requestId = UUID.randomUUID().toString();
+        String requestId = generateRequestId(currentTimestamp);
         
         RedisCommands<String, String> syncCommands = connection.sync();
         
@@ -150,11 +154,14 @@ public class SlidingWindowRateLimiter implements AutoCloseable {
      * 
      * @param clientId The unique identifier for the client
      * @return CompletableFuture that resolves to true if allowed, false if rate limited
+     * @throws IllegalArgumentException if clientId is null or contains invalid characters
      */
     public CompletableFuture<Boolean> isAllowedAsync(String clientId) {
+        validateClientId(clientId);
+        
         String rateLimitKey = RATE_LIMIT_KEY_PREFIX + clientId;
         long currentTimestamp = System.currentTimeMillis();
-        String requestId = UUID.randomUUID().toString();
+        String requestId = generateRequestId(currentTimestamp);
         
         RedisAsyncCommands<String, String> asyncCommands = connection.async();
         
@@ -202,6 +209,39 @@ public class SlidingWindowRateLimiter implements AutoCloseable {
      */
     public int getMaxRequests() {
         return maxRequests;
+    }
+    
+    /**
+     * Validates the client ID to prevent Redis key injection attacks.
+     * 
+     * @param clientId The client ID to validate
+     * @throws IllegalArgumentException if clientId is null or contains invalid characters
+     */
+    private void validateClientId(String clientId) {
+        if (clientId == null || clientId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Client ID cannot be null or empty");
+        }
+        
+        // Check for characters that could cause Redis key injection or issues
+        if (clientId.contains("\n") || clientId.contains("\r") || clientId.contains(" ")) {
+            throw new IllegalArgumentException("Client ID contains invalid characters (newlines or spaces)");
+        }
+        
+        // Limit length to prevent abuse
+        if (clientId.length() > 256) {
+            throw new IllegalArgumentException("Client ID is too long (max 256 characters)");
+        }
+    }
+    
+    /**
+     * Generates a unique request ID for ZADD operations.
+     * Uses an atomic counter combined with timestamp for efficiency and uniqueness.
+     * 
+     * @param timestamp The current timestamp in milliseconds
+     * @return A unique request ID
+     */
+    private String generateRequestId(long timestamp) {
+        return timestamp + "-" + REQUEST_COUNTER.incrementAndGet();
     }
     
     /**

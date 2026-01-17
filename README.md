@@ -146,7 +146,9 @@ Synchronously checks if a request from the given client is allowed.
 
 - **Parameters**: `clientId` - Unique identifier for the client (user ID, IP, API key, etc.)
 - **Returns**: `true` if allowed, `false` if rate limited
+- **Throws**: `IllegalArgumentException` if clientId is null, empty, or contains invalid characters
 - **Thread-safe**: Yes
+- **Security**: Client IDs are validated to prevent Redis key injection attacks
 
 #### `CompletableFuture<Boolean> isAllowedAsync(String clientId)`
 
@@ -154,7 +156,9 @@ Asynchronously checks if a request from the given client is allowed.
 
 - **Parameters**: `clientId` - Unique identifier for the client
 - **Returns**: `CompletableFuture<Boolean>` resolving to `true` if allowed, `false` if rate limited
+- **Throws**: `IllegalArgumentException` if clientId is null, empty, or contains invalid characters
 - **Thread-safe**: Yes
+- **Security**: Client IDs are validated to prevent Redis key injection attacks
 
 #### `void close()`
 
